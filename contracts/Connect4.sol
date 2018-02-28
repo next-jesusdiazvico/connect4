@@ -1,3 +1,5 @@
+pragma solidity ^0.4.17;
+
 /**
  * @title Connect4.sol
  * Authors (alphabetically ordered by surname):
@@ -74,13 +76,13 @@ contract Connect4 {
 
 	
 	/**
-	 * @dev newTurn event, triggered each time the turn is changed
+	 * @dev NewTurn event, triggered each time the turn is changed
 	 * @param c4 The address of the board this event is related to.
-	 * @param nextPlayer The address of the player who has to make the next move.
-	 * @param player "Player1" if the player who has to make the next move is 
+	 * @param nextPlayerAddr The address of the player who has to make the next move.
+	 * @param nextPlayerName "Player1" if the player who has to make the next move is 
 	 *  player1, "Player2" if it is player2.	 
-	 */	
-	event newTurn(address indexed c4, address indexed nextPlayer, string player);
+	 */
+	event NewTurn(address indexed c4, address indexed nextPlayerAddr, string nextPlayerName);
 
 	
 	/**
@@ -96,7 +98,7 @@ contract Connect4 {
 	 * @dev Constructor. 
 	 * @dev Initializes the owner of the contract.
 	 */
-	function Connect4() {
+	function Connect4() public {
 
 		owner = msg.sender;
 
@@ -108,7 +110,7 @@ contract Connect4 {
 	 * @param p1 The address of the new player1.
 	 * @return bool True if success, false otherwise.
 	 */
-	function setPlayer1(address p1) returns (bool) {
+	function setPlayer1(address p1) public returns (bool) {
 
 		if (msg.sender != owner) return false;
 		player1 = p1;
@@ -123,7 +125,7 @@ contract Connect4 {
 	 * @param p2 The address of the new player2.
 	 * @return bool True if success, false otherwise.
 	 */
-	function setPlayer2(address p2) returns (bool) {
+	function setPlayer2(address p2) public returns (bool) {
 
 		if (msg.sender != owner) return false;
 		player2 = p2;
@@ -133,11 +135,35 @@ contract Connect4 {
 	}
 
 	/**
+	 * @dev Returns the address of player1
+	 * @return address The address of player1
+	 */
+	function getPlayer1() public view returns (address) {
+		return player1;
+	}
+
+	/**
+	 * @dev Returns the address of player2
+	 * @return address The address of player2
+	 */
+	function getPlayer2() public view returns (address) {
+		return player2;
+	}
+
+	/**
+	 * @dev Returns the addresses of the players in the game
+	 * @return address The addresses of both players, as an array
+	 */	
+	function getPlayers() public view returns (address[2]) {
+		return [player1, player2];
+	}
+
+	/**
 	 * @dev Once both players have been set, initializes the game.
 	 * @dev Only the contract owner can execute this function.
 	 * @return bool True if the operation succeeded, false otherwise.
 	 */
-	function initGame() returns (bool) {
+	function initGame() public returns (bool) {
 
 		if (msg.sender != owner) return false;
 
@@ -160,8 +186,8 @@ contract Connect4 {
 
 			/* Initializes the turn 'randomly', based on the hash of the previous block */
 			uint8 r = uint8(uint256(block.blockhash(block.number-1))*now)%2;
-			if (r == 0)  { turn = player1; newTurn(this, player1, "Player1"); }
-			else { turn = player2; newTurn(this, player2, "Player2"); }
+			if (r == 0)  { turn = player1; NewTurn(this, player1, "Player1"); }
+			else { turn = player2; NewTurn(this, player2, "Player2"); }
 
 			return true;
 		} 
@@ -177,7 +203,7 @@ contract Connect4 {
 	 * @return uint8 1 if player equals the address of player1, 2 if player 
 	 *  equals the address of player2; 0 otherwise.
 	 */
-	function getPlayerNumber(address player) returns (uint8) {
+	function getPlayerNumber(address player) public view returns (uint8) {
 		if (player == player1) return 1;
 		if (player == player2) return 2;
 		return 0;
@@ -191,7 +217,7 @@ contract Connect4 {
 	 * @return uint8 1 if player1 has made 4 in a row, 2 if player2 has made 
 	 *  4 in a row; 0 otherwise.
 	 */
-	function checkHorizontalWin(uint8 col, uint8 row) internal returns(uint8) {
+	function checkHorizontalWin(uint8 col, uint8 row) internal view returns(uint8) {
 		
 		/* Horizontal win: same row, across columns */
 		for (uint8 i=0; i<=3; i++) {
@@ -226,7 +252,7 @@ contract Connect4 {
 	 * @return uint8 1 if player1 has made 4 in a row, 2 if player2 has made 
 	 *  4 in a row; 0 otherwise.
 	 */
-	function checkVerticalWin(uint8 col, uint8 row) internal returns(uint8) {
+	function checkVerticalWin(uint8 col, uint8 row) internal view returns(uint8) {
 		
 		/* Vertical win: same column, across rows */
 		for (uint8 i=0; i<=3; i++) {		
@@ -262,7 +288,7 @@ contract Connect4 {
 	 * @return uint8 1 if player1 has made 4 in a row, 2 if player2 has made 
 	 *  4 in a row; 0 otherwise.
 	 */
-	function checkDiagonalWin(uint8 col, uint8 row) internal returns(uint8) {
+	function checkDiagonalWin(uint8 col, uint8 row) internal view returns(uint8) {
 		
 		uint8 i;
 		uint8 maxRowInc = 5 - row;
@@ -274,7 +300,7 @@ contract Connect4 {
 
 			/* Ensure limits */
 			if (col < i) continue;
-			if (row + i < 3) continue;			
+			if (row + i < 3) continue;
 			if (col - i > 3) continue;
 			if (row + i > 5) continue;
 			
@@ -295,7 +321,7 @@ contract Connect4 {
 
 			/* Ensure limits */
 			if (col + i > 6) continue;
-			if (row + i > 6) continue;			
+			if (row + i > 6) continue;
 			if (col + i < 3) continue;
 			if (row + i < 3) continue;
 
@@ -323,9 +349,9 @@ contract Connect4 {
 	 * @return uint8 1 if player1 has made 4 in a row, 2 if player2 has made 
 	 *  4 in a row; 0 otherwise.
 	 */
-	function checkWin(uint8 col, uint8 row) internal returns(uint8) {
+	function checkWin(uint8 col, uint8 row) internal view returns(uint8) {
 
-		uint8 winner;
+		uint8 _winner;
 
 		/* Invalid move */
 		if (col > 6 || row > 5) {
@@ -333,16 +359,16 @@ contract Connect4 {
 		}
 
 		/* Check horizontal win */
-		winner = checkHorizontalWin(col, row);
-		if (winner != 0) return winner;
+		_winner = checkHorizontalWin(col, row);
+		if (winner != 0) return _winner;
 
 		/* Check vertical win */
-		winner = checkVerticalWin(col, row);
-		if (winner != 0) return winner;
+		_winner = checkVerticalWin(col, row);
+		if (_winner != 0) return _winner;
 
 		/* Check diagonal win */
-		winner = checkDiagonalWin(col, row);
-		if (winner != 0) return winner;
+		_winner = checkDiagonalWin(col, row);
+		if (_winner != 0) return _winner;
 
 		return 0;
 
@@ -355,7 +381,7 @@ contract Connect4 {
 	 *  who moved was not the holder of the turn, if col is not in [0,6] or if
 	 *  the specified column is filled.
 	 */
-	function move(uint8 col) returns(bool) {
+	function move(uint8 col) public returns(bool) {
 
 		/* Check if it is the caller's turn */
 	    if (msg.sender != turn) return false;
@@ -368,8 +394,8 @@ contract Connect4 {
 	       control somehow, but this is just a game...). */
 	    if (col > 6)  {
 	    	/* Invalid move, request new one */
-	    	if (turn == player1) { newTurn(this, player1, "Player1"); } 
-	    	else { newTurn(this, player2, "Player2"); }
+	    	if (turn == player1) { NewTurn(this, player1, "Player1"); }
+	    	else { NewTurn(this, player2, "Player2"); }
 	    	return false;
 	    }
 
@@ -377,8 +403,8 @@ contract Connect4 {
 		uint8 row = filled[col];
 		if (row >= 6)  {
 	    	/* Invalid move, request new one */
-	    	if (turn == player1) { newTurn(this, player1, "Player1"); } 
-	    	else { newTurn(this, player2, "Player2"); }			
+	    	if (turn == player1) { NewTurn(this, player1, "Player1"); }
+	    	else { NewTurn(this, player2, "Player2"); }
 			return false;
 		}
 		
@@ -389,15 +415,15 @@ contract Connect4 {
 			turn = player2;
 		} else {
 		    board[col][row] = 2;
-            PlayerMoved(this, "Player2", col, row);
-			turn = player1;
+ 		    PlayerMoved(this, "Player2", col, row);
+		    turn = player1;
 		}
 
 		/* Update last movement */
 		lastMoveCol = col;
 		lastMoveRow = row;
 
-		/* Uupdate filled auxiliary array */
+		/* Update filled auxiliary array */
         filled[col] = row+1;        
 
 		/* Check if this move was a win move */
@@ -427,9 +453,9 @@ contract Connect4 {
 
 		/* Trigger a new turn event */
 		if (turn == player1) {
-			newTurn(this, player1, "Player1");
+			NewTurn(this, player1, "Player1");
 		} else { 
-			newTurn(this, player2, "Player2");
+			NewTurn(this, player2, "Player2");
 		}
 
 		return true;
@@ -439,8 +465,8 @@ contract Connect4 {
 	/**
 	 * @dev Terminates the contract. Only the owner can do this. 
 	 */
-	function kill() {
-		if (msg.sender == owner) suicide(owner);
+	function kill() public {
+		if (msg.sender == owner) selfdestruct(owner);
 	}
 
 }

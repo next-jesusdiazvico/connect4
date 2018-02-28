@@ -1,120 +1,432 @@
+#!/usr/bin/env node
+
+var cmdArgs = require('command-line-args');
+var CmdUsage = require('command-line-usage');
 var Web3 = require('web3');
-var web3 = new Web3();
+const fs = require('fs');
+const Q = require('q');
+const readline = require('readline');
 
-web3.setProvider(new web3.providers.HttpProvider('http://localhost:8545'));
+var options;
+var accounts;
+var games = {};
+var players = {};
+//var web3 = new Web3();
 
-var c4_ABI = [{"constant":false,"inputs":[],"name":"initGame","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[],"name":"kill","outputs":[],"type":"function"},{"constant":true,"inputs":[],"name":"player2","outputs":[{"name":"","type":"address"}],"type":"function"},{"constant":true,"inputs":[{"name":"","type":"uint256"}],"name":"filled","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":true,"inputs":[],"name":"lastMoveCol","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":false,"inputs":[{"name":"col","type":"uint8"}],"name":"move","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[{"name":"p2","type":"address"}],"name":"setPlayer2","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":true,"inputs":[{"name":"","type":"uint256"},{"name":"","type":"uint256"}],"name":"board","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":true,"inputs":[],"name":"turn","outputs":[{"name":"","type":"address"}],"type":"function"},{"constant":true,"inputs":[],"name":"lastMoveRow","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":false,"inputs":[{"name":"player","type":"address"}],"name":"getPlayerNumber","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":true,"inputs":[],"name":"player1","outputs":[{"name":"","type":"address"}],"type":"function"},{"constant":true,"inputs":[],"name":"winner","outputs":[{"name":"","type":"uint8"}],"type":"function"},{"constant":true,"inputs":[],"name":"end","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[{"name":"p1","type":"address"}],"name":"setPlayer1","outputs":[{"name":"","type":"bool"}],"type":"function"},{"inputs":[],"type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"name":"c4","type":"address"},{"indexed":false,"name":"player","type":"string"},{"indexed":false,"name":"col","type":"uint8"},{"indexed":false,"name":"row","type":"uint8"}],"name":"PlayerMoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"c4","type":"address"},{"indexed":true,"name":"nextPlayer","type":"address"},{"indexed":false,"name":"player","type":"string"}],"name":"newTurn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"c4","type":"address"},{"indexed":true,"name":"winner","type":"address"},{"indexed":false,"name":"player","type":"string"}],"name":"GameEnd","type":"event"}];
-var p_ABI = [{"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"type":"function"},{"constant":true,"inputs":[],"name":"c4","outputs":[{"name":"","type":"address"}],"type":"function"},{"constant":false,"inputs":[],"name":"move","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[],"name":"kill","outputs":[],"type":"function"},{"constant":false,"inputs":[{"name":"col","type":"uint8"}],"name":"manualMove","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[{"name":"_c4","type":"address"}],"name":"setConnect4","outputs":[{"name":"","type":"bool"}],"type":"function"},{"inputs":[{"name":"_name","type":"string"},{"name":"_c4","type":"address"}],"type":"constructor"}];
-
-/* Note: in this demo app, the c4 of both player1 and player2 must have been set through the constructor and match the address in c4_addr */
-var c4_addr = "0x322287eafe437f49dbafc4b7afab5a2ef98a694c"; // e.g.: "0x09b59ca92fa68e8cdc65beddb6c7c09623f45bc8";
-var p1_addr = "0x4fed13610f2fbad7327eab5bb54c8b87962aae88"; // e.g.: "0xb7e2c5c509b0a69ff8b17d90e38576e23daf6945";
-var p2_addr = "0x90e09ddfefbf0eca02f802c4c337ace8b054de32"; // e.g.: "0xfd13abe1eb815a65a9b3b132f24b0d9132690f49";
-
-var p1Transactions = [];
-var p2Transactions = [];
-
-var c4 = web3.eth.contract(c4_ABI).at(c4_addr);
-var p1 = web3.eth.contract(p_ABI).at(p1_addr);
-var p2 = web3.eth.contract(p_ABI).at(p2_addr);
-
-var p1_name = "Player1";
-var p2_name = "Player2";
-
-/* Set player1 */							    
-c4.setPlayer1(p1.address, {from:web3.eth.accounts[0], gas:99999999}, function(error,result) {
+function processParams () {
 	
-	if(!error) {
-		console.log("["+p1_name+" set]");
+	var cmdOptions = [
+			{ 
+				name: 'help', 
+				alias: 'h', 
+				type: Boolean, 
+				description: "Tool usage information." 
+			},
+			{ 
+				name: 'connect4', 
+				alias: 'c', 
+				type: String,
+				defaultValue: './build/contracts/Connect4.json', 
+				description: "Connect4 contract data (defaults to 'build/contracts/Connect4.json')." 
+			},			
+			{ 
+				name: 'gas', 
+				alias: 'g', 
+				type: Number,
+				defaultValue: 4712388,
+				description: "Gas (defaults to)." 
+			},
+			{ 
+				name: 'gasPrice', 
+				alias: 'G', 
+				type: Number,
+				defaultValue: 100000000000, 
+				description: "gasPrice (defaults to 2)." 
+			},
+			{ 
+				name: 'player', 
+				alias: 'P', 
+				type: String,
+				defaultValue: './build/contracts/Player.json', 
+				description: "Player contract data (defaults to 'build/contracts/Player.json')." 
+			},	
+			{ 
+				name: 'provider', 
+				alias: 'p', 
+				type: String, 
+				defaultValue: "ws://localhost:8545", 
+				description: "Web3 provider URL (defaults to ws://localhost:8545)."
+			},			
+		];
 
-		/* Set player2 */
-		c4.setPlayer2(p2.address, {from:web3.eth.accounts[0], gas:99999999}, function(error,result) {
+	var options = cmdArgs(cmdOptions);
 
-			if(!error) {
-				console.log("["+p2_name+" set]");
-
-				/* Init game */
-				c4.initGame({from:web3.eth.accounts[0], gas:99999999}, function(error,result) {
-
-					if (!error) {
-						console.log("[Game begin]");
-
-						/* Create filters */
-						var filterPlayerMoved = c4.PlayerMoved();
-						var filterNewTurn = c4.newTurn();
-						var filterGameEnd = c4.GameEnd();   							    
-
-						filterPlayerMoved.watch(function (error, result) {
-
-							if(!error) {
-								if(result.args.c4 == c4.address) {
-									if (result.args.player == "Player1") {
-										console.log("[Player moved] "+p1_name+" moved ("+result.args.col+","+result.args.row+").");
-									} else {
-										console.log("[Player moved] "+p2_name+" moved ("+result.args.col+","+result.args.row+").");
-									}
-								}
-							} else {
-								console.log("[Player moved] "+error);
-							}
-						});
-
-						filterNewTurn.watch(function (error, result) {
-
-							if(!error) {
-								if(result.args.c4 == c4.address) {
-									if(result.args.player == "Player1") {
-										console.log("[New turn] It is now "+p1_name+"'s turn.");
-										var t = p1.move({from:web3.eth.accounts[0], gas:999999999});
-										console.log("(DEBUG) "+p1_name+" sent move transacion: "+t);
-										p1Transactions.push(t);
-									} else {
-										console.log("[New turn] It is now "+p2_name+"'s turn.");
-										var t = p2.move({from:web3.eth.accounts[0], gas:999999999});
-										console.log("(DEBUG) "+p2_name+" sent move transacion: "+t);
-										p2Transactions.push(t);
-									}
-								}
-							} else {
-								console.log("[New turn] "+error);
-							}
-						});
-
-						filterGameEnd.watch(function (error, result) {
-
-							if(!error) {
-								if(result.args.c4 == c4.address) {
-									if(result.args.player == "Player1") {
-										console.log("[Game end] "+p1_name+" won.");
-									} else if (result.args.player == "Player2") {
-										console.log("[Game end] "+p2_name+" won.");
-									} else {
-										console.log("[Game end] Tie.");
-									}
-								}
-							} else {
-								console.log("[Game end] "+error);
-							}
-
-							totalGasP1=0;
-							for (i=0; i<p1Transactions.length; i++) {
-								receipt = web3.eth.getTransactionReceipt(p1Transactions[i]);
-								totalGasP1+=receipt.gasUsed;
-							}
-
-							totalGasP2=0;
-							for (i=0; i<p2Transactions.length; i++) {
-								receipt = web3.eth.getTransactionReceipt(p2Transactions[i]);
-								totalGasP2+=receipt.gasUsed;
-							}
-
-							console.log("Total gas used by "+p1_name+": "+totalGasP1);
-							console.log("Total gas used by "+p2_name+": "+totalGasP2);
-							process.exit();
-						});
-					}
-				})
-			}
-		})
+	/* Print usage if requested */
+	if (options.help) {
+		console.log(CmdUsage([ 
+		{
+			header: 'Connect4.',
+			content: 'Play Connect4 in Ethereum (through the command line!)'
+		},
+		{
+			header: 'Options',
+			optionList: cmdOptions
+		} 
+		]));
+		process.exit(0);
 	}
-})
+
+	return options;
+
+}
+
+function createGame() {
+
+	var deferred = Q.defer();
+
+	/* Parse the Connect4 contract */
+	var connect4 = JSON.parse(fs.readFileSync(options.connect4, 'utf8'));
+
+	/* Get a contract instance */
+	var connect4Instance = new web3.eth.Contract(connect4.abi);
+	connect4Instance.deploy({ data: connect4.bytecode })
+	.send({from: accounts[0], gas: options.gas, gasPrice: options.gasPrice})
+	.then(function(c4) {		
+		games[c4.options.address] = c4;
+		deferred.resolve(c4.options.address);
+	});
+
+	return deferred.promise;
+
+}
+
+function createPlayer() {
+
+	var deferred = Q.defer();
+
+	/* Parse the Connect4 contract */
+	var player = JSON.parse(fs.readFileSync(options.player, 'utf8'));
+	var info = {};
+
+	const rlp = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		terminal: false,
+	});	
+
+	rlp.question('Player name> ', function(args) {
+		info.name = args;
+		console.log("Name is: "+info.name);
+		rlp.question('Game address> ', function(args) {
+			info.game = args;
+			console.log("Game is: "+info.game);
+			rlp.close();
+
+			/* Get a contract instance */
+			var playerInstance = new web3.eth.Contract(player.abi);
+			playerInstance.deploy({ 
+				data: player.bytecode, 
+				arguments: [info.name, info.game] 
+			})
+			.send({from: accounts[0], gas: options.gas, gasPrice: options.gasPrice})
+			.on('error', (error) => {
+				console.log(error);
+			})
+			.then(function(p) {
+				players[p.options.address] = p;
+				deferred.resolve(p.options.address);
+			});			
+		});
+	});
+
+	return deferred.promise;
+
+}
+
+function listGames() {
+	console.log("==== List of games ====");
+	for (var addr in games) {
+		console.log(addr);
+	}
+}
+
+function selectGame() {
+
+	var deferred = Q.defer();
+	
+	const rlp = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		terminal: false,
+	});
+
+	rlp.question('Game address> ', function(addr) {
+		rlp.close();
+		console.log("Game address is: "+addr);
+		games[addr]["gasUsed"] = {};
+		deferred.resolve(games[addr]);
+	});
+
+	return deferred.promise;
+
+}
+
+function getGasUsed(event) {
+
+	var deferred = Q.defer();
+
+	web3.eth.getTransactionReceipt(event.transactionHash, (error, receipt) => {
+		if (error) {
+			console.log(error);
+		} else {
+			// console.log("Receipt! gasUsed: "+receipt.gasUsed);
+			// console.log("___________________");
+			// console.log(receipt);
+			// console.log("___________________");
+			event.gasUsed = receipt.gasUsed;
+			deferred.resolve(event);
+		}
+	});
+
+	return deferred.promise;
+
+}
+
+function subscribeGameEvents(game) {
+
+	/* Subscribe to events */
+	var eventPlayerMoved = game.events.PlayerMoved()
+	.on('data', function(event) {
+		c4 = event.returnValues.c4;
+		if(c4 == game.options.address) {
+			player = event.returnValues.player;
+			col = event.returnValues.col;
+			row = event.returnValues.row;
+			console.log("[PlayerMoved] "+player+" played ("+col+","+row+")");
+		}
+	}).on('changed', function(event) {
+		console.log("[PlayerMoved] Changed Wololooooooo");
+	}).on('error', function(event) {
+		console.log("[PlayerMoved] Error Wololooooooo");
+	});
+
+	var eventNewTurn = game.events.NewTurn()
+	.on('data', function(event) {
+		c4 = event.returnValues.c4;
+		nextPlayerName = event.returnValues.nextPlayerName;
+		if(c4 == game.options.address) {
+			console.log("[New turn] It is now "+nextPlayerName+"'s turn.");
+			getGasUsed(event)
+			.then( (event) => {				
+				nextPlayerAddr = event.returnValues.nextPlayerAddr;
+				game["gasUsed"][nextPlayerAddr] += event.gasUsed;				
+				players[nextPlayerAddr].methods.move()
+				.send({
+					from: accounts[0],
+					gas: options.gas,
+					gasPrice: options.gasPrice
+				});
+			});
+		}		
+	}).on('changed', function(event) {
+		console.log("[NewTurn] Changed Wololooooooo");		
+	}).on('error', function(event) {
+		console.log("[NewTurn] Error Wololooooooo");
+	});
+	
+	var eventGameEnd = game.events.GameEnd()
+	.on('data', function(event) {
+		winner = event.returnValues.player;
+		console.log("[GameEnd] Player "+winner+" won!");
+		for (player in game["gasUsed"]) {
+			console.log("Gas used by "+player+": "+game["gasUsed"][player]);
+		}		
+	}).on('changed', function(event) {
+		console.log("[GameEnd] Changed Wololooooooo");
+	}).on('error', function(event) {
+		console.log("[GameEnd] Error Wololooooooo");
+	});
+
+	return game;
+
+}
+
+function setPlayer1(game) {
+
+	var deferred = Q.defer();
+	
+	const rlp = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		terminal: false,
+	});
+
+	rlp.question('Player1 address> ', function(addr) {
+		rlp.close();
+
+		console.log("Player1 address is: "+addr);
+		game.p1 = addr;
+		game["gasUsed"][addr] = 0;
+
+		game.methods.setPlayer1(addr).send({
+			from: accounts[0],
+			gas: options.gas,
+			gasPrice: options.gasPrice
+		}).on('error', (error) => {
+			console.log(error);
+			deferred.reject(error);
+		}).on('confirmation', (confirmationNumber, receipt) => {
+			deferred.resolve(game);
+		});
+
+	});
+
+	return deferred.promise;
+
+}
+
+function setPlayer2(game) {
+
+	var deferred = Q.defer();
+	
+	const rlp = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		terminal: false,
+	});
+
+	rlp.question('Player2 address> ', function(addr) {
+		rlp.close();
+
+		console.log("Player2 address is: "+addr);
+		game.p2 = addr;
+		game["gasUsed"][addr] = 0;
+
+		game.methods.setPlayer2(addr).send({
+			from: accounts[0],
+			gas: options.gas,
+			gasPrice: options.gasPrice
+		}).on('error', (error) => {
+			console.log(error);
+			deferred.reject(error);
+		}).on('confirmation', (confirmationNumber, receipt) => {
+			console.log("Player2 set; confirmation number: "+confirmationNumber);
+			deferred.resolve(game);
+		});
+
+	});
+
+	return deferred.promise;
+
+}
+
+function initGame(game) {
+	
+	var deferred = Q.defer();
+
+	game.methods.initGame().send({
+		from: accounts[0],
+		gas: options.gas,
+		gasPrice: options.gasPrice
+	}).on('error', (error) => {
+		console.log(error);
+		deferred.reject(error);
+	}).on('confirmation', (confirmationNumber, receipt) => {
+		console.log("Confirmation Number: "+confirmationNumber);
+		deferred.resolve("WOLOLOOOOO");
+	});
+
+	return deferred.promise;
+}
+
+function playGame() {
+
+	var deferred = Q.defer();
+
+	selectGame()
+	.then(subscribeGameEvents)
+	.then(setPlayer1)
+	.then(setPlayer2)
+	.then(initGame)
+	.catch((error) => { 
+		console.log("WOLOLOOOO catch"); 
+		console.log(error); 
+	});
+
+	return deferred.promise;
+
+}
+
+function parseCommand() {
+
+	/* Prepare interface */
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+		terminal: false,
+	});		
+
+	rl.question('C4> ', (answer) => {
+		rl.close();		
+		switch(answer.trim()) {
+			case 'createGame': 
+				console.log("createGame");
+				Q.fcall(createGame)
+				.then((address) => {
+					console.log("Deployed game at address: "+address);
+				})
+				.then(parseCommand)
+				.catch((error) => {
+					console.log(error);
+				});
+				break;
+			case 'createPlayer':
+				console.log("createPlayer");
+				Q.fcall(createPlayer)
+				.then((address) => {
+					console.log("Deployed player at address: "+address);
+				})
+				.then(parseCommand)
+				.catch((error) => {
+					console.log(error);
+				});				
+				break;
+			case 'listGames':
+				console.log("listGames");
+				Q.fcall(listGames)
+				.then(parseCommand)
+				.catch((error) => {
+					console.log(error);
+				});
+				break;
+			case 'playGame':
+				console.log("playGame")
+				Q.fcall(playGame)
+				.then(parseCommand)
+				.catch((error) => {
+					console.log("WOLOLOOO playGame");
+					console.log(error);
+				});
+				break;				
+			case 'exit':
+				console.log("exit");
+				break;
+			default:
+				console.log("Options: createGame, createPlayer, listGames, playGame, exit");
+				parseCommand();
+				break;
+		}
+	});
+
+}
+
+options = processParams();
+
+/* Connect to the Web3 provider */
+var web3 = new Web3(new Web3.providers.WebsocketProvider(options.provider));
+
+/* Parse the Player contract */
+web3.eth.getAccounts().then(_accounts => {
+	accounts = _accounts;
+	parseCommand();	
+});
